@@ -4,7 +4,7 @@ import java.io.File
 import com.typesafe.sbt.GitPlugin.autoImport.git
 import com.typesafe.sbt.git.{GitRunner, NullLogger}
 import sbt.Keys.{baseDirectory, compile, test}
-import sbt.{AutoPlugin, Def, SettingKey, Task, TaskKey, Test, taskKey}
+import sbt.{AutoPlugin, Def, SettingKey, Task, TaskKey, Test, file, taskKey}
 
 object TCRPlugin extends AutoPlugin {
   override def requires = sbt.plugins.JvmPlugin
@@ -49,8 +49,15 @@ case class TCR[A](verify: TaskKey[A], dir: SettingKey[File], commitCommand: List
   }
   
   val gitHasUncommittedChanges: Def.Initialize[Task[Boolean]] = Def.task {
-    val dirValue = dir.value
+    val dirValue: File = dir.value
     
+    val rootPath = file(".").getAbsolutePath.stripSuffix("/.")
+
+    val inProjectRoot: Boolean =
+      rootPath == dirValue.getAbsolutePath
+    
+//    log(s".   = ${rootPath}")
+//    log(s"dir = ${dirValue.getAbsolutePath}")
     log(s"Checking for changes in: ${dirValue.getName}")
     
     val runner: GitRunner = git.runner.value
@@ -65,7 +72,7 @@ case class TCR[A](verify: TaskKey[A], dir: SettingKey[File], commitCommand: List
       changes = runner(command: _*)(dir.value, NullLogger)
       if changes.nonEmpty
       last    <- changes.split("\\s").lastOption
-      if last.startsWith(dirValue.getName)
+      if inProjectRoot || last.startsWith(dirValue.getName)
     } yield last
     
     uncommittedChanges.exists(_.nonEmpty)
