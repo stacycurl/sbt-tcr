@@ -7,7 +7,7 @@ sbt> test &amp;&amp; commit || revert
 Add the following to `project/plugins.sbt`
 
 ```scala
-addSbtPlugin("com.github.stacycurl" % "sbt-tcr" % "1.0.0")
+addSbtPlugin("com.github.stacycurl" % "sbt-tcr" % "1.0.1")
 ```
 
 Resources:
