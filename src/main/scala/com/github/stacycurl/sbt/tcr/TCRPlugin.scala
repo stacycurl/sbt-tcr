@@ -3,12 +3,14 @@ package com.github.stacycurl.sbt.tcr
 import java.io.File
 import com.typesafe.sbt.GitPlugin.autoImport.git
 import com.typesafe.sbt.git.{GitRunner, NullLogger}
-import sbt.Keys.{baseDirectory, compile, test}
-import sbt.{AutoPlugin, Def, SettingKey, Task, TaskKey, Test, file, taskKey}
+import sbt.Def.{task, taskDyn}
+import sbt.Keys.{baseDirectory, compile, streams, test}
+import sbt.{AutoPlugin, Def, Logger, PluginTrigger, Plugins, SettingKey, Task, TaskKey, Test, file, taskKey}
+
 
 object TCRPlugin extends AutoPlugin {
-  override def requires = sbt.plugins.JvmPlugin
-  override def trigger = allRequirements
+  override def requires: Plugins = sbt.plugins.JvmPlugin
+  override def trigger: PluginTrigger = allRequirements
 
   object autoImport {
     val tcrTestCommitOrRevert = taskKey[Unit]("test && commit || revert")
@@ -22,33 +24,31 @@ object TCRPlugin extends AutoPlugin {
   
   import autoImport._
 
-  val append     = List("commit", "--amend", "--no-edit") 
+  val append    = List("commit", "--amend", "--no-edit") 
   val commitDot = List("commit", "-m", ".")
   
   override lazy val projectSettings = Seq(
-    tcrTestCommitOrRevert := TCR(Test / test, baseDirectory, commitDot).task.value,
-    tcrTestAppendOrRevert := TCR(Test / test, baseDirectory, append).task.value,
+    tcrTestCommitOrRevert := taskDyn(TCR(Test / test, baseDirectory, commitDot, streams.value.log).doIt),
+    tcrTestAppendOrRevert := taskDyn(TCR(Test / test, baseDirectory, append, streams.value.log).doIt),
 
-    tcrCompileCommitOrRevert := TCR(Test / compile, baseDirectory, commitDot).task.value,
-    tcrCompileAppendOrRevert := TCR(Test / compile, baseDirectory, append).task.value
+    tcrCompileCommitOrRevert := taskDyn(TCR(Test / compile, baseDirectory, commitDot, streams.value.log).doIt),
+    tcrCompileAppendOrRevert := taskDyn(TCR(Test / compile, baseDirectory, append, streams.value.log).doIt)
   )
 }
 
-case class TCR[A](verify: TaskKey[A], dir: SettingKey[File], commitCommand: List[String]) {
-  lazy val task: Def.Initialize[Task[Unit]] = {
-    Def.taskDyn[Unit] {
-      if (gitHasUncommittedChanges.value) Def.sequential(
-        addChanges,
-        Def.taskDyn {
-          if (verify.result.value.toEither.isRight) commit else restore
-        }
-      ) else Def.task {
-        log(s"No changes, nothing to ${verify.key.label}")
+case class TCR[A](verify: TaskKey[A], dir: SettingKey[File], commitCommand: List[String], logger: Logger) {
+  lazy val doIt: Def.Initialize[Task[Unit]] = taskDyn[Unit] {
+    if (gitHasUncommittedChanges.value) Def.sequential(
+      addChanges,
+      taskDyn {
+        if (verify.result.value.toEither.isRight) commit else restore
       }
+    ) else task {
+      logger.info(s"No changes, nothing to ${verify.key.label}")
     }
   }
-  
-  val gitHasUncommittedChanges: Def.Initialize[Task[Boolean]] = Def.task {
+
+  val gitHasUncommittedChanges: Def.Initialize[Task[Boolean]] = task {
     val dirValue: File = dir.value
     
     val rootPath = file(".").getAbsolutePath.stripSuffix("/.")
@@ -56,9 +56,7 @@ case class TCR[A](verify: TaskKey[A], dir: SettingKey[File], commitCommand: List
     val inProjectRoot: Boolean =
       rootPath == dirValue.getAbsolutePath
     
-//    log(s".   = ${rootPath}")
-//    log(s"dir = ${dirValue.getAbsolutePath}")
-    log(s"Checking for changes in: ${dirValue.getName}")
+    logger.debug(s"Checking for changes in: ${dirValue.getName}")
     
     val runner: GitRunner = git.runner.value
 
@@ -78,28 +76,23 @@ case class TCR[A](verify: TaskKey[A], dir: SettingKey[File], commitCommand: List
     uncommittedChanges.exists(_.nonEmpty)
   }
 
-  def addChanges: Def.Initialize[Task[Unit]] = Def.task[Unit] {
-    log("Adding changes")
+  val addChanges: Def.Initialize[Task[Unit]] = task[Unit] {
+    logger.debug("Adding changes")
     
-    git.runner.value.apply("add", ".")(dir.value, sbt.Keys.streams.value.log)
+    git.runner.value.apply("add", ".")(dir.value, logger)
   }
   
-  val commit: Def.Initialize[Task[Unit]] = Def.task[Unit] {
-    log("Commiting changes")
+  val commit: Def.Initialize[Task[Unit]] = task[Unit] {
+    logger.info("Commiting changes")
   
-   git.runner.value.apply(commitCommand: _*)(dir.value, sbt.Keys.streams.value.log)
+    git.runner.value.apply(commitCommand: _*)(dir.value, logger)
   }
   
-  
-  val restore: Def.Initialize[Task[Unit]] = Def.task[Unit] {
-    log("restoring.")
+  val restore: Def.Initialize[Task[Unit]] = task[Unit] {
+    logger.info("restoring.")
 
-    git.runner.value.apply("reset", ".")(dir.value, sbt.Keys.streams.value.log)
-    git.runner.value.apply("checkout", "--", ".")(dir.value, sbt.Keys.streams.value.log)
-  }
-  
-  private def log[Z](value: Z): Unit = {
-    println(value.toString)
+    git.runner.value.apply("reset", ".")(dir.value, logger)
+    git.runner.value.apply("checkout", "--", ".")(dir.value, logger)
   }
 }
 

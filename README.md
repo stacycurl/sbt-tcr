@@ -18,5 +18,5 @@ https://medium.com/@kentbeck_7670/test-commit-revert-870bbd756864
 [badge-build]: https://github.com/stacycurl/sbt-tcr/actions/workflows/build.yml/badge.svg
 [link-build]: https://github.com/stacycurl/sbt-tcr/actions/
 
-[badge-maven]: https://maven-badges.herokuapp.com/maven-central/com.github.stacycurl/sbt-tcr_2.12_1.0/badge.svg
-[link-maven]: https://maven-badges.herokuapp.com/maven-central/com.github.stacycurl/sbt-tcr_2.12_1.0
+[badge-maven]: https://maven-badges.herokuapp.com/maven-central/com.github.stacycurl/sbt-tcr/badge.svg
+[link-maven]: https://maven-badges.herokuapp.com/maven-central/com.github.stacycurl/sbt-tcr
